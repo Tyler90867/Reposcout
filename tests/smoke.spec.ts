@@ -63,6 +63,19 @@ test.describe('Smoke tests', () => {
     await expect(page.getByTestId('nav-user-name')).toHaveCount(0)
   })
 
+  test('briefs page asks signed-out visitors to sign in', async ({ page }) => {
+    await page.goto('/briefs')
+    await expect(page.getByText('Sign in to continue')).toBeVisible({ timeout: 15000 })
+    // The form and the list must not render for someone who is not signed in.
+    await expect(page.getByTestId('brief-form')).toHaveCount(0)
+    await expect(page.getByTestId('brief-list')).toHaveCount(0)
+  })
+
+  test('/home forwards to /briefs', async ({ page }) => {
+    await page.goto('/home')
+    await expect(page).toHaveURL(/\/briefs$/, { timeout: 15000 })
+  })
+
   test('unknown route shows 404', async ({ page }) => {
     await page.goto('/nonexistent-page-xyz')
     await waitForApp(page)

@@ -16,6 +16,32 @@
  *   4. Switch to it via `data-theme` on <html> in index.html.
  */
 
+/* Scout: RepoScout's own theme. Dark navy with a blue accent. */
+[data-theme="scout"] {
+  color-scheme: dark;
+  --color-background: #0b0f17;
+  --color-foreground: #e5e7eb;
+  --color-card: #121826;
+  --color-card-foreground: #e5e7eb;
+  --color-popover: #121826;
+  --color-popover-foreground: #e5e7eb;
+  --color-primary: #2563eb;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #1a2233;
+  --color-secondary-foreground: #e5e7eb;
+  --color-muted: #1a2233;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #1e293b;
+  --color-accent-foreground: #e5e7eb;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #243044;
+  --color-input: #243044;
+  --color-ring: #3b82f6;
+  --color-shell: #0b0f17;
+  --color-shell-panel: #121826;
+}
+
 /* Paper — light example theme; shows the full token contract incl.
  * `color-scheme: light`. Replace or delete it once the app has its own. */
 [data-theme="paper"] {
