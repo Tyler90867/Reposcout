@@ -121,16 +121,18 @@ a second user cannot see or change the first user's brief.
 
 ## How it was built
 
-Built by Tyler Ogden as a DeepSpace build exercise, working with Claude (an AI
-coding agent) in five phases.
+I'm Tyler Ogden. I built RepoScout as a DeepSpace build exercise, in five
+phases, using Claude (an AI coding agent) as a pair programmer.
 
-- **Tyler** wrote the brief and its rules, logged in to DeepSpace, ran the dev
-  server, created this repository, and ran the first deploy. He approved each
-  phase, push, and deploy, and asked for two additions: treating content from
-  GitHub as untrusted text, and the daily limit. He tested each phase by hand
-  on his computer, and sign-in, save, refresh, and delete on the live site.
-- **Claude** wrote most of the code and all of the automated tests under that
-  direction, and ran the checks after every step.
+- **My part:** I chose the idea and the scope, set up the project (DeepSpace
+  login, dev server, this repository, and the first deploy), held the build to
+  its rules, and reviewed and approved every phase, push, and deploy. I added two requirements along
+  the way: content from GitHub is treated as untrusted text, and each user has
+  a daily limit. I tested the foundation, the GitHub step, and the AI summary
+  step by hand on my computer, and sign-in, save, refresh, and delete on the
+  live site.
+- **Claude's part:** Claude wrote most of the code and all of the automated
+  tests under my direction, and ran the checks after every step.
 
 `NOTES.md` is the build log: what was done in each phase, the problems that
 came up and how they were fixed, and what was and was not tested.
