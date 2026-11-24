@@ -129,8 +129,9 @@ phases, using Claude (an AI coding agent) as a pair programmer.
   its rules, and reviewed and approved every phase, push, and deploy. I added two requirements along
   the way: content from GitHub is treated as untrusted text, and each user has
   a daily limit. I tested the foundation, the GitHub step, and the AI summary
-  step by hand on my computer, and sign-in, save, refresh, and delete on the
-  live site.
+  step by hand on my computer. On the live site I tested sign-in, save, refresh,
+  and delete, and generated a full brief with competitors for one of my own
+  repositories.
 - **Claude's part:** Claude wrote most of the code and all of the automated
   tests under my direction, and ran the checks after every step.
 
