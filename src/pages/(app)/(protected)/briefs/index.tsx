@@ -2,7 +2,7 @@
  * The main page: /briefs
  *
  * Top half: a form to paste a GitHub repo link. Saving it also asks the
- * server to read the repository from GitHub.
+ * server to read the repository from GitHub and write the AI summary.
  * Bottom half: the list of briefs this user has saved.
  *
  * This file lives in the (protected) folder, so only signed-in users reach it.
@@ -15,6 +15,7 @@ import { Button, ConfirmModal, Input, Label, useToast } from '@/components/ui'
 import { generateBrief } from '@/lib/generate-brief'
 import { parseGithubUrl } from '@/lib/github-url'
 import { newBrief, type Brief } from '@/schemas/briefs-schema'
+import { DAILY_LIMIT } from '@/schemas/usage-schema'
 
 export default function BriefsPage() {
   // useQuery keeps a live list of briefs. The server only sends briefs that
@@ -53,10 +54,10 @@ export default function BriefsPage() {
       const briefId = await createConfirmed(newBrief(parsed.url, parsed.owner, parsed.repo))
       setRepoUrl('')
 
-      // 2. Ask the server to read the repository from GitHub.
+      // 2. Ask the server to fill it in (GitHub, then the AI summary).
       const result = await generateBrief(briefId)
       if (result.ok) {
-        toast.success('Repository loaded', `${parsed.owner}/${parsed.repo}`)
+        toast.success('Summary written', `${parsed.owner}/${parsed.repo}`)
       } else {
         setFormError(`${result.error} The link is still saved below, so you can retry or delete it.`)
       }
@@ -118,8 +119,8 @@ export default function BriefsPage() {
           )}
           <p className="mt-3 text-xs text-muted-foreground">
             {saving
-              ? 'Saving, then reading the repository from GitHub...'
-              : 'Right now this reads the repository from GitHub. The AI summary and the competitor search are not connected yet.'}
+              ? 'Reading the repository and writing the summary. This can take up to a minute...'
+              : `Right now this reads the repository from GitHub and writes an AI summary. The competitor search is not connected yet. Limit: ${DAILY_LIMIT} briefs per day.`}
           </p>
         </form>
 
@@ -196,7 +197,9 @@ export default function BriefsPage() {
 
 /** The few words shown under each brief in the list. */
 function statusLabel(brief: Brief): string {
-  if (brief.error) return 'Could not load from GitHub'
-  if (brief.status === 'repo_loaded') return 'Repository loaded'
-  return 'Not generated yet'
+  if (brief.status === 'summarized') return 'Summary written'
+  if (brief.status === 'repo_loaded') {
+    return brief.error ? 'Could not write the summary' : 'Repository loaded, summary not written yet'
+  }
+  return brief.error ? 'Could not load from GitHub' : 'Not generated yet'
 }

@@ -1,22 +1,24 @@
 /**
- * The GitHub step, tested against the real GitHub integration.
+ * Generating a brief, tested against the real GitHub and AI integrations.
  *
  * What this proves:
  *   - a real public repository loads, and its facts show on the brief
+ *   - the AI writes a summary and an audience for it
  *   - HTML inside a real README is shown as plain text, not run
  *   - the loaded facts are still there after a refresh
  *   - a repository that does not exist gives a clear error, and the saved
  *     link is kept so the user can retry or delete it
  *
- * Cost: two GitHub calls for the real repository (about a quarter of one
- * credit per run). The failed lookup is not charged.
+ * Cost: two GitHub calls and one AI call for the real repository (about a
+ * third of one credit per run). The failed lookup is not charged. The real
+ * repository also uses one of Tester A's 10 briefs for the day.
  */
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
 
 const usableTestAccounts = loadAllTestAccounts().length
 test.skip(usableTestAccounts < 1, 'Needs 1 usable test account.')
 
-test('github step: a real repo loads, a missing repo shows a clear error', async ({ users }) => {
+test('generate: a real repo gets facts and a summary, a missing repo shows a clear error', async ({ users }) => {
   const [a] = await users(1)
   const missing = `honojs/reposcout-missing-${Date.now()}`
 
@@ -37,7 +39,7 @@ test('github step: a real repo loads, a missing repo shows a clear error', async
   const realRow = a.page
     .getByTestId('brief-row')
     .filter({ has: a.page.locator(`a[href="/briefs/${briefId}"]`) })
-  await expect(realRow).toContainText('Repository loaded', { timeout: 60_000 })
+  await expect(realRow).toContainText('Summary written', { timeout: 90_000 })
   await expect(a.page.locator('#repo-url-error')).toHaveCount(0)
 
   await realRow.getByRole('link', { name: 'honojs/hono' }).click()
@@ -54,9 +56,21 @@ test('github step: a real repo loads, a missing repo shows a clear error', async
   await expect(facts.locator('pre')).toContainText('<img src=')
   await expect(facts.locator('img')).toHaveCount(0)
 
+  // The AI step wrote real sentences. We cannot know the exact words, so we
+  // check that both parts are there and are more than a few characters.
+  const summary = a.page.getByTestId('brief-summary')
+  const audience = a.page.getByTestId('brief-audience')
+  await expect(summary).not.toContainText('Not generated yet')
+  await expect(audience).not.toContainText('Not generated yet')
+  expect((await summary.innerText()).length).toBeGreaterThan(40)
+  expect((await audience.innerText()).length).toBeGreaterThan(20)
+  // Nothing is left to do, so the "Generate brief" box is gone.
+  await expect(a.page.getByRole('button', { name: 'Generate brief' })).toHaveCount(0)
+
   // ── Still there after a refresh ────────────────────────────────────────
   await a.page.reload()
   await expect(a.page.getByTestId('repo-facts')).toBeVisible({ timeout: 15_000 })
+  await expect(a.page.getByTestId('brief-summary')).not.toContainText('Not generated yet')
 
   // Clean up the real one.
   await a.page.getByTestId('brief-detail').getByRole('button', { name: 'Delete' }).click()
@@ -87,9 +101,10 @@ test('github step: a real repo loads, a missing repo shows a clear error', async
 /**
  * Server actions skip the normal permission rules, so the action has to
  * check ownership itself. This proves that check works.
- * Cost: nothing. Both lookups are for repositories that do not exist.
+ * Cost: nothing. Both lookups are for repositories that do not exist, and
+ * those are not charged and do not count toward the daily limit.
  */
-test('github step: nobody can run it on a brief they do not own', async ({ users }) => {
+test('generate: nobody can run it on a brief they do not own', async ({ users }) => {
   test.skip(usableTestAccounts < 2, 'Needs 2 usable test accounts.')
   const [a, b] = await users(2)
   const stamp = Date.now()
@@ -114,8 +129,11 @@ test('github step: nobody can run it on a brief they do not own', async ({ users
     b.page.getByRole('button', { name: 'Save brief' }).click(),
   ])
   const signInProofB = requestB.headers()['authorization']
+  // Wait for B's own call to finish. Its result does not matter here (B may
+  // even be at the daily limit). We only needed B's sign-in proof.
+  await requestB.response()
   const rowB = b.page.getByTestId('brief-row').filter({ hasText: nameB })
-  await expect(rowB).toContainText('Could not load from GitHub', { timeout: 60_000 })
+  await expect(rowB).toBeVisible({ timeout: 15_000 })
 
   // B asks the server to work on A's brief. The server must refuse.
   const asB = await b.page.request.post('/api/actions/generateBrief', {

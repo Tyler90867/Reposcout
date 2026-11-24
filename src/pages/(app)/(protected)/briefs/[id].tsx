@@ -28,7 +28,7 @@ export default function BriefDetailPage() {
 
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  // True while we wait for the server to read the repository.
+  // True while we wait for the server to work on the brief.
   const [running, setRunning] = useState(false)
 
   const brief = briefs.find((record) => record.recordId === id)
@@ -38,7 +38,7 @@ export default function BriefDetailPage() {
     setRunning(true)
     const result = await generateBrief(brief.recordId)
     if (!result.ok) {
-      toast.error('Could not load from GitHub', result.error)
+      toast.error('Could not finish the brief', result.error)
     }
     // No need to copy the result into this page by hand: the server saved it
     // on the brief, and useQuery above shows the new data by itself.
@@ -131,15 +131,14 @@ export default function BriefDetailPage() {
               </p>
             )}
 
-            {brief.data.status === 'draft' && (
+            {/* Shown until every step built so far has finished. */}
+            {brief.data.status !== 'summarized' && (
               <div className="mt-6 flex flex-col gap-3 rounded-lg border border-border bg-secondary p-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted-foreground">
-                  {running
-                    ? 'Reading the repository from GitHub...'
-                    : 'The link is saved, but nothing has been loaded for it yet.'}
+                  {running ? 'Working on it. This can take up to a minute...' : unfinishedText(brief.data)}
                 </p>
                 <Button size="sm" loading={running} onClick={handleGenerate} className="shrink-0">
-                  {brief.data.error ? 'Try again' : 'Load from GitHub'}
+                  {brief.data.error ? 'Try again' : 'Generate brief'}
                 </Button>
               </div>
             )}
@@ -150,9 +149,20 @@ export default function BriefDetailPage() {
               </Section>
             )}
 
-            <Section title="What it does">{brief.data.summary || <NotGenerated />}</Section>
+            <Section title="What it does">
+              <span data-testid="brief-summary">{brief.data.summary || <NotGenerated />}</span>
+            </Section>
 
-            <Section title="Who it is for">{brief.data.audience || <NotGenerated />}</Section>
+            <Section title="Who it is for">
+              <span data-testid="brief-audience">{brief.data.audience || <NotGenerated />}</span>
+            </Section>
+
+            {brief.data.summary && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                These two sections are based only on the repository's description and README.
+                AI-written text can contain mistakes.
+              </p>
+            )}
 
             <Section title="Competitors">
               {brief.data.competitors.length === 0 ? (
@@ -200,6 +210,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <div className="mt-2 text-sm leading-relaxed">{children}</div>
     </section>
   )
+}
+
+/** What to tell the user about a brief that is not finished yet. */
+function unfinishedText(brief: Brief): string {
+  if (brief.status === 'draft') return 'The link is saved, but nothing has been loaded for it yet.'
+  return 'The repository is loaded, but the summary is not written yet.'
 }
 
 function NotGenerated() {

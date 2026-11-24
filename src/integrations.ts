@@ -28,5 +28,7 @@ export const integrations: Record<
   composio: { billing: 'user' },
   // RepoScout: the app owner pays for reading public repositories.
   github: { billing: 'developer' },
+  // RepoScout: the app owner pays for the AI summary.
+  anthropic: { billing: 'developer' },
   // openai: { billing: 'developer', anonymous: true },
 }

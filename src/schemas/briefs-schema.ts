@@ -27,6 +27,7 @@ export type Brief = {
    * How far the brief has got:
    *   'draft'       = saved, nothing loaded yet
    *   'repo_loaded' = the GitHub step finished
+   *   'summarized'  = the AI step finished
    */
   status: string
   /** Why the last attempt stopped. Empty when nothing went wrong. */
@@ -40,9 +41,11 @@ export type Brief = {
   topics: string[]
   readme: string
 
-  // Not generated yet. These come from the AI and search steps.
+  // Filled in by the AI step (src/actions/ai.ts).
   summary: string
   audience: string
+
+  // Not generated yet. This comes from the search step.
   competitors: Competitor[]
 }
 

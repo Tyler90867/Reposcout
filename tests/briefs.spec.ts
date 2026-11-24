@@ -10,7 +10,7 @@
  * The repo names here are made up. This test is about saving and privacy,
  * not about GitHub, so the "read the repository" call is replaced with a
  * pretend answer (see skipGithub below). Nothing is fetched and it costs no
- * credits. The real GitHub call is tested in tests/github.spec.ts.
+ * credits. The real GitHub call is tested in tests/generate.spec.ts.
  */
 import type { Page } from '@playwright/test'
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
