@@ -20,3 +20,7 @@ src/modals.tsx
 *.pem
 *.key
 .claude/settings.local.json
+
+# Private working files: kept on this computer only
+STUDY.md
+SUBMISSION.md
