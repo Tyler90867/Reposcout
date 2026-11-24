@@ -1,7 +1,8 @@
 /**
  * The main page: /briefs
  *
- * Top half: a form to paste a GitHub repo link and save a brief for it.
+ * Top half: a form to paste a GitHub repo link. Saving it also asks the
+ * server to read the repository from GitHub.
  * Bottom half: the list of briefs this user has saved.
  *
  * This file lives in the (protected) folder, so only signed-in users reach it.
@@ -11,8 +12,9 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutations, useQuery } from 'deepspace'
 import { Button, ConfirmModal, Input, Label, useToast } from '@/components/ui'
+import { generateBrief } from '@/lib/generate-brief'
 import { parseGithubUrl } from '@/lib/github-url'
-import type { Brief } from '@/schemas/briefs-schema'
+import { newBrief, type Brief } from '@/schemas/briefs-schema'
 
 export default function BriefsPage() {
   // useQuery keeps a live list of briefs. The server only sends briefs that
@@ -47,17 +49,17 @@ export default function BriefsPage() {
     setFormError('')
     setSaving(true)
     try {
-      await createConfirmed({
-        repoUrl: parsed.url,
-        owner: parsed.owner,
-        repo: parsed.repo,
-        status: 'draft',
-        summary: '',
-        audience: '',
-        competitors: [],
-      })
+      // 1. Save the link as a new brief. We get back the new brief's id.
+      const briefId = await createConfirmed(newBrief(parsed.url, parsed.owner, parsed.repo))
       setRepoUrl('')
-      toast.success('Brief saved', `${parsed.owner}/${parsed.repo}`)
+
+      // 2. Ask the server to read the repository from GitHub.
+      const result = await generateBrief(briefId)
+      if (result.ok) {
+        toast.success('Repository loaded', `${parsed.owner}/${parsed.repo}`)
+      } else {
+        setFormError(`${result.error} The link is still saved below, so you can retry or delete it.`)
+      }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err)
       setFormError(`Could not save the brief: ${reason}`)
@@ -115,8 +117,9 @@ export default function BriefsPage() {
             </p>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
-            Right now this saves a placeholder brief. Writing the summary, audience, and
-            competitors is not connected yet.
+            {saving
+              ? 'Saving, then reading the repository from GitHub...'
+              : 'Right now this reads the repository from GitHub. The AI summary and the competitor search are not connected yet.'}
           </p>
         </form>
 
@@ -158,7 +161,8 @@ export default function BriefsPage() {
                       </Link>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Saved {new Date(brief.createdAt).toLocaleDateString()}
-                        {brief.data.status === 'draft' && ' · Not generated yet'}
+                        {' · '}
+                        {statusLabel(brief.data)}
                       </p>
                     </div>
                     <Button
@@ -188,4 +192,11 @@ export default function BriefsPage() {
       />
     </div>
   )
+}
+
+/** The few words shown under each brief in the list. */
+function statusLabel(brief: Brief): string {
+  if (brief.error) return 'Could not load from GitHub'
+  if (brief.status === 'repo_loaded') return 'Repository loaded'
+  return 'Not generated yet'
 }

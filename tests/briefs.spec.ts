@@ -7,9 +7,12 @@
  *   - a brief can be reopened and deleted
  *   - user B cannot see user A's brief, in the list or by its direct address
  *
- * The repo names here are made up. Nothing is fetched from GitHub in this
- * test, so it costs no credits.
+ * The repo names here are made up. This test is about saving and privacy,
+ * not about GitHub, so the "read the repository" call is replaced with a
+ * pretend answer (see skipGithub below). Nothing is fetched and it costs no
+ * credits. The real GitHub call is tested in tests/github.spec.ts.
  */
+import type { Page } from '@playwright/test'
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
 
 const usableTestAccounts = loadAllTestAccounts().length
@@ -19,8 +22,17 @@ test.skip(
     '`npx deepspace test accounts create --email <name>@deepspace.test --name "<name>" --password-stdin`.',
 )
 
+/** Answer the generateBrief call in the browser, so the server is never asked. */
+async function skipGithub(page: Page) {
+  await page.route('**/api/actions/generateBrief', (route) =>
+    route.fulfill({ json: { success: true, data: {} } }),
+  )
+}
+
 test('briefs: save, refresh, reopen, delete, and stay private between two users', async ({ users }) => {
   const [a, b] = await users(2)
+  await skipGithub(a.page)
+  await skipGithub(b.page)
 
   // A different name on every run, so old runs can never confuse this one.
   const stamp = Date.now()

@@ -8,7 +8,9 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutations, useQuery } from 'deepspace'
+import { RepoFacts } from '@/components/RepoFacts'
 import { Button, ConfirmModal, useToast } from '@/components/ui'
+import { generateBrief } from '@/lib/generate-brief'
 import type { Brief } from '@/schemas/briefs-schema'
 
 export default function BriefDetailPage() {
@@ -26,8 +28,22 @@ export default function BriefDetailPage() {
 
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // True while we wait for the server to read the repository.
+  const [running, setRunning] = useState(false)
 
   const brief = briefs.find((record) => record.recordId === id)
+
+  async function handleGenerate() {
+    if (!brief) return
+    setRunning(true)
+    const result = await generateBrief(brief.recordId)
+    if (!result.ok) {
+      toast.error('Could not load from GitHub', result.error)
+    }
+    // No need to copy the result into this page by hand: the server saved it
+    // on the brief, and useQuery above shows the new data by itself.
+    setRunning(false)
+  }
 
   async function handleDelete() {
     if (!brief) return
@@ -105,11 +121,33 @@ export default function BriefDetailPage() {
               </Button>
             </div>
 
-            {brief.data.status === 'draft' && (
-              <p className="mt-6 rounded-lg border border-border bg-secondary p-4 text-sm text-muted-foreground">
-                This is a placeholder brief. The repository link is saved, but nothing has been
-                generated for it yet.
+            {brief.data.error && (
+              <p
+                role="alert"
+                data-testid="brief-error"
+                className="mt-6 rounded-lg border border-destructive bg-card p-4 text-sm text-destructive"
+              >
+                {brief.data.error}
               </p>
+            )}
+
+            {brief.data.status === 'draft' && (
+              <div className="mt-6 flex flex-col gap-3 rounded-lg border border-border bg-secondary p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {running
+                    ? 'Reading the repository from GitHub...'
+                    : 'The link is saved, but nothing has been loaded for it yet.'}
+                </p>
+                <Button size="sm" loading={running} onClick={handleGenerate} className="shrink-0">
+                  {brief.data.error ? 'Try again' : 'Load from GitHub'}
+                </Button>
+              </div>
+            )}
+
+            {brief.data.status !== 'draft' && (
+              <Section title="From GitHub">
+                <RepoFacts brief={brief.data} />
+              </Section>
             )}
 
             <Section title="What it does">{brief.data.summary || <NotGenerated />}</Section>

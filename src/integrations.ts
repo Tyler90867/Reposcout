@@ -26,5 +26,7 @@ export const integrations: Record<
 > = {
   google: { billing: 'user' },
   composio: { billing: 'user' },
+  // RepoScout: the app owner pays for reading public repositories.
+  github: { billing: 'developer' },
   // openai: { billing: 'developer', anonymous: true },
 }

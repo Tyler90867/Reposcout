@@ -23,11 +23,47 @@ export type Brief = {
   repoUrl: string
   owner: string
   repo: string
-  /** 'draft' = saved, but nothing has been generated for it yet. */
+  /**
+   * How far the brief has got:
+   *   'draft'       = saved, nothing loaded yet
+   *   'repo_loaded' = the GitHub step finished
+   */
   status: string
+  /** Why the last attempt stopped. Empty when nothing went wrong. */
+  error: string
+
+  // Filled in by the GitHub step (src/actions/github.ts).
+  description: string
+  stars: number
+  language: string
+  homepage: string
+  topics: string[]
+  readme: string
+
+  // Not generated yet. These come from the AI and search steps.
   summary: string
   audience: string
   competitors: Competitor[]
+}
+
+/** A brand new brief: just the link, with every other field empty. */
+export function newBrief(repoUrl: string, owner: string, repo: string): Brief {
+  return {
+    repoUrl,
+    owner,
+    repo,
+    status: 'draft',
+    error: '',
+    description: '',
+    stars: 0,
+    language: '',
+    homepage: '',
+    topics: [],
+    readme: '',
+    summary: '',
+    audience: '',
+    competitors: [],
+  }
 }
 
 export const briefsSchema: CollectionSchema = {
@@ -37,9 +73,17 @@ export const briefsSchema: CollectionSchema = {
     { name: 'owner', storage: 'text', interpretation: 'plain', required: true },
     { name: 'repo', storage: 'text', interpretation: 'plain', required: true },
     { name: 'status', storage: 'text', interpretation: 'plain', default: 'draft' },
+    { name: 'error', storage: 'text', interpretation: 'plain', default: '' },
+    { name: 'description', storage: 'text', interpretation: 'plain', default: '' },
+    { name: 'stars', storage: 'number', interpretation: 'plain', default: 0 },
+    { name: 'language', storage: 'text', interpretation: 'plain', default: '' },
+    { name: 'homepage', storage: 'text', interpretation: 'plain', default: '' },
+    // A list of topic words, stored as JSON. DeepSpace converts it for us.
+    { name: 'topics', storage: 'text', interpretation: { kind: 'json' }, default: [] },
+    { name: 'readme', storage: 'text', interpretation: 'plain', default: '' },
     { name: 'summary', storage: 'text', interpretation: 'plain', default: '' },
     { name: 'audience', storage: 'text', interpretation: 'plain', default: '' },
-    // A list of competitors, stored as JSON. DeepSpace converts it for us.
+    // A list of competitors, stored as JSON.
     { name: 'competitors', storage: 'text', interpretation: { kind: 'json' }, default: [] },
   ],
   permissions: {

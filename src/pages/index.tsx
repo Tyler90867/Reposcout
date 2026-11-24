@@ -44,8 +44,8 @@ export default function Landing() {
           Open your briefs
         </Link>
         <p className="mt-6 max-w-md text-xs text-muted-foreground">
-          Early build: briefs are saved as placeholders. Writing the summary, audience, and
-          competitors is not connected yet.
+          Early build: RepoScout reads the repository from GitHub. The AI summary and the
+          competitor search are not connected yet.
         </p>
       </div>
     </>
