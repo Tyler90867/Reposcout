@@ -30,5 +30,7 @@ export const integrations: Record<
   github: { billing: 'developer' },
   // RepoScout: the app owner pays for the AI summary.
   anthropic: { billing: 'developer' },
+  // RepoScout: the app owner pays for the competitor web search.
+  exa: { billing: 'developer' },
   // openai: { billing: 'developer', anonymous: true },
 }

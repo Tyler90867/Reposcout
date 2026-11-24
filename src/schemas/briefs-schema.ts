@@ -15,6 +15,7 @@ import type { CollectionSchema } from 'deepspace/schema'
 export type Competitor = {
   name: string
   description: string
+  /** The web page, found by the search, that names this competitor. */
   url: string
 }
 
@@ -28,6 +29,7 @@ export type Brief = {
    *   'draft'       = saved, nothing loaded yet
    *   'repo_loaded' = the GitHub step finished
    *   'summarized'  = the AI step finished
+   *   'done'        = the search step finished. The brief is complete.
    */
   status: string
   /** Why the last attempt stopped. Empty when nothing went wrong. */
@@ -45,7 +47,8 @@ export type Brief = {
   summary: string
   audience: string
 
-  // Not generated yet. This comes from the search step.
+  // Filled in by the search step (src/actions/competitors.ts).
+  // An empty list on a finished brief means "none could be confirmed".
   competitors: Competitor[]
 }
 

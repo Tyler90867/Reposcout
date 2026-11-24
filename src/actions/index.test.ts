@@ -2,20 +2,27 @@
  * Tests for the whole generateBrief flow, with nothing real behind it.
  *
  * "Fake tools" stand in for DeepSpace: briefs live in a Map, usage records in
- * an array, and each test decides what GitHub and the AI "answer". That lets
- * us test things we cannot make happen on demand with the real services,
- * such as the AI failing or a user hitting the daily limit. It costs nothing.
+ * an array, and each test decides what GitHub, the AI, and the search
+ * "answer". That lets us test things we cannot make happen on demand with
+ * the real services, such as the search failing or a user hitting the daily
+ * limit. It costs nothing.
  */
 import { describe, expect, it } from 'vitest'
 import type { ActionTools } from 'deepspace/worker'
 import { newBrief, type Brief } from '../schemas/briefs-schema'
 import { DAILY_LIMIT, type Usage } from '../schemas/usage-schema'
 import { NOTHING_TO_READ } from './ai'
+import { PICK_PROMPT } from './competitors'
 import { actions } from './index'
 import { LIMIT_MESSAGE, today } from './usage'
 
 const OWNER = 'user-1'
 const BRIEF_ID = 'brief-1'
+
+/** An AI answer in the real shape: the working-out part first, then the text. */
+function aiSays(text: string) {
+  return { success: true, data: { content: [{ type: 'thinking', thinking: '' }, { type: 'text', text }] } }
+}
 
 // Pretend answers from the outside services.
 const REPO_OK = {
@@ -24,13 +31,33 @@ const REPO_OK = {
 }
 const README_OK = { success: true, data: { content: btoa('# Hello') } }
 const NOT_FOUND = { success: false, error: 'GitHub public API error 404: Not Found' }
-const AI_OK = {
-  success: true,
-  data: { content: [{ type: 'text', text: '{"summary": "It is a framework.", "audience": "Developers."}' }] },
-}
+const AI_OK = aiSays('{"summary": "It is a framework.", "audience": "Developers."}')
 const AI_DOWN = { success: false, error: 'anthropic/chat-completion (500): upstream error' }
+const SEARCH_OK = {
+  success: true,
+  data: {
+    results: [
+      { title: 'Hono vs Express', url: 'https://example.com/hono-vs-express', text: 'Express is another web framework.' },
+    ],
+  },
+}
+const SEARCH_DOWN = { success: false, error: 'exa/search (500): upstream error' }
+// The AI lists one competitor that is on the page and one that is not.
+const PICK_OK = aiSays(
+  JSON.stringify({
+    competitors: [
+      { name: 'Express', description: 'A web framework.', source: 1 },
+      { name: 'MadeUpCo', description: 'Not named on any page.', source: 1 },
+    ],
+  }),
+)
+const EXPRESS = { name: 'Express', description: 'A web framework.', url: 'https://example.com/hono-vs-express' }
 
-type Answers = { repo?: unknown; readme?: unknown; ai?: unknown }
+const GITHUB_CALLS = ['github/get-repository', 'github/get-repository-readme']
+const AI_CALL = 'anthropic/chat-completion'
+const SEARCH_CALL = 'exa/search'
+
+type Answers = { repo?: unknown; readme?: unknown; ai?: unknown; search?: unknown; pick?: unknown }
 
 function setup(answers: Answers = {}) {
   const briefs = new Map<string, { createdBy: string; data: Brief }>()
@@ -62,10 +89,13 @@ function setup(answers: Answers = {}) {
       usage.push(data)
       return { success: true, data: { recordId: `usage-${usage.length}` } }
     },
-    integration: async (endpoint: string) => {
+    integration: async (endpoint: string, body: { system?: string }) => {
       calls.push(endpoint)
       if (endpoint === 'github/get-repository') return answers.repo ?? REPO_OK
       if (endpoint === 'github/get-repository-readme') return answers.readme ?? README_OK
+      if (endpoint === SEARCH_CALL) return answers.search ?? SEARCH_OK
+      // The AI is called twice. The standing instructions tell the calls apart.
+      if (body.system === PICK_PROMPT) return answers.pick ?? PICK_OK
       return answers.ai ?? AI_OK
     },
   }
@@ -81,24 +111,22 @@ function setup(answers: Answers = {}) {
 }
 
 describe('generateBrief', () => {
-  it('runs GitHub, then the AI, and saves both', async () => {
+  it('runs GitHub, the AI, and the search, and saves all three', async () => {
     const test = setup()
     const result = await test.run()
 
     expect(result.success).toBe(true)
-    expect(test.calls).toEqual([
-      'github/get-repository',
-      'github/get-repository-readme',
-      'anthropic/chat-completion',
-    ])
+    expect(test.calls).toEqual([...GITHUB_CALLS, AI_CALL, SEARCH_CALL, AI_CALL])
     expect(test.brief()).toMatchObject({
-      status: 'summarized',
+      status: 'done',
       error: '',
       stars: 123,
       readme: '# Hello',
       summary: 'It is a framework.',
       audience: 'Developers.',
     })
+    // MadeUpCo is not named on the page it points to, so it was dropped.
+    expect(test.brief().competitors).toEqual([EXPRESS])
     expect(test.usage).toHaveLength(1)
   })
 
@@ -117,8 +145,46 @@ describe('generateBrief', () => {
     const second = await test.run()
 
     expect(second.success).toBe(true)
-    expect(test.calls).toEqual(['anthropic/chat-completion'])
-    expect(test.brief()).toMatchObject({ status: 'summarized', error: '', summary: 'It is a framework.' })
+    expect(test.calls).toEqual([AI_CALL, SEARCH_CALL, AI_CALL])
+    expect(test.brief()).toMatchObject({ status: 'done', error: '', summary: 'It is a framework.' })
+  })
+
+  it('keeps the summary when the search fails, and a retry only runs the search step', async () => {
+    const test = setup({ search: SEARCH_DOWN })
+    const first = await test.run()
+
+    expect(first.success).toBe(false)
+    expect(test.brief().status).toBe('summarized')
+    expect(test.brief().summary).toBe('It is a framework.')
+    expect(test.brief().competitors).toEqual([])
+    expect(test.brief().error).toContain('The web search did not work')
+
+    // The search comes back. Run the same brief again.
+    test.answers.search = SEARCH_OK
+    test.calls.length = 0
+    const second = await test.run()
+
+    expect(second.success).toBe(true)
+    expect(test.calls).toEqual([SEARCH_CALL, AI_CALL])
+    expect(test.brief()).toMatchObject({ status: 'done', error: '', competitors: [EXPRESS] })
+  })
+
+  it('finishes with an empty list when the search finds nothing, without asking the AI', async () => {
+    const test = setup({ search: { success: true, data: { results: [] } } })
+    const result = await test.run()
+
+    expect(result.success).toBe(true)
+    expect(test.calls).toEqual([...GITHUB_CALLS, AI_CALL, SEARCH_CALL])
+    expect(test.brief()).toMatchObject({ status: 'done', error: '', competitors: [] })
+  })
+
+  it('finishes with an empty list when every name the AI gives is made up', async () => {
+    const madeUp = JSON.stringify({ competitors: [{ name: 'MadeUpCo', description: 'Invented.', source: 1 }] })
+    const test = setup({ pick: aiSays(madeUp) })
+    const result = await test.run()
+
+    expect(result.success).toBe(true)
+    expect(test.brief()).toMatchObject({ status: 'done', competitors: [] })
   })
 
   it('does not count a repository GitHub cannot find', async () => {
@@ -175,7 +241,7 @@ describe('generateBrief', () => {
     expect(test.usage).toHaveLength(1)
   })
 
-  it('skips the AI and says so when there is no description and no README', async () => {
+  it('skips the AI and the search, and says so, when there is no description and no README', async () => {
     const test = setup({
       repo: { success: true, data: { stargazers_count: 0 } },
       readme: NOT_FOUND,
@@ -183,12 +249,12 @@ describe('generateBrief', () => {
     const result = await test.run()
 
     expect(result.success).toBe(true)
-    expect(test.calls).not.toContain('anthropic/chat-completion')
-    expect(test.brief().summary).toBe(NOTHING_TO_READ)
+    expect(test.calls).toEqual(GITHUB_CALLS)
+    expect(test.brief()).toMatchObject({ status: 'done', summary: NOTHING_TO_READ, competitors: [] })
   })
 
   it('saves a clear error when the AI answer cannot be read', async () => {
-    const test = setup({ ai: { success: true, data: { content: [{ type: 'text', text: 'Sorry, no.' }] } } })
+    const test = setup({ ai: aiSays('Sorry, no.') })
     const result = await test.run()
 
     expect(result.success).toBe(false)

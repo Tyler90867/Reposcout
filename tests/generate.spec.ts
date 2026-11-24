@@ -1,24 +1,29 @@
 /**
- * Generating a brief, tested against the real GitHub and AI integrations.
+ * Generating a brief, tested against the real GitHub, AI, and web search
+ * integrations.
  *
  * What this proves:
  *   - a real public repository loads, and its facts show on the brief
  *   - the AI writes a summary and an audience for it
+ *   - the search step finishes, and every competitor shown has a real web link
  *   - HTML inside a real README is shown as plain text, not run
- *   - the loaded facts are still there after a refresh
+ *   - the whole brief is still there after a refresh
  *   - a repository that does not exist gives a clear error, and the saved
  *     link is kept so the user can retry or delete it
  *
- * Cost: two GitHub calls and one AI call for the real repository (about a
- * third of one credit per run). The failed lookup is not charged. The real
- * repository also uses one of Tester A's 10 briefs for the day.
+ * Cost: two GitHub calls, two AI calls, and one web search for the real
+ * repository (a little over one credit per run). The failed lookup is not
+ * charged. The real repository also uses one of Tester A's 10 briefs for
+ * the day.
  */
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
 
 const usableTestAccounts = loadAllTestAccounts().length
 test.skip(usableTestAccounts < 1, 'Needs 1 usable test account.')
 
-test('generate: a real repo gets facts and a summary, a missing repo shows a clear error', async ({ users }) => {
+test('generate: a real repo gets a full brief, a missing repo shows a clear error', async ({ users }) => {
+  // Real services are called one after another, so allow more than the usual 30 seconds.
+  test.setTimeout(180_000)
   const [a] = await users(1)
   const missing = `honojs/reposcout-missing-${Date.now()}`
 
@@ -39,7 +44,7 @@ test('generate: a real repo gets facts and a summary, a missing repo shows a cle
   const realRow = a.page
     .getByTestId('brief-row')
     .filter({ has: a.page.locator(`a[href="/briefs/${briefId}"]`) })
-  await expect(realRow).toContainText('Summary written', { timeout: 90_000 })
+  await expect(realRow).toContainText('Brief ready', { timeout: 120_000 })
   await expect(a.page.locator('#repo-url-error')).toHaveCount(0)
 
   await realRow.getByRole('link', { name: 'honojs/hono' }).click()
@@ -67,10 +72,27 @@ test('generate: a real repo gets facts and a summary, a missing repo shows a cle
   // Nothing is left to do, so the "Generate brief" box is gone.
   await expect(a.page.getByRole('button', { name: 'Generate brief' })).toHaveCount(0)
 
+  // The search step finished. A real search can come back strong or weak, so
+  // the test accepts both honest outcomes: a list where every competitor has
+  // a real web link, or the "could not confirm any" message.
+  const competitors = a.page.getByTestId('competitor')
+  const count = await competitors.count()
+  expect(count).toBeLessThanOrEqual(5)
+  if (count === 0) {
+    await expect(a.page.getByTestId('no-competitors')).toBeVisible()
+  } else {
+    for (const link of await competitors.getByRole('link').all()) {
+      expect(await link.getAttribute('href')).toMatch(/^https?:\/\//)
+    }
+  }
+  console.log(`Competitors shown for honojs/hono: ${count}`)
+  console.log((await competitors.allInnerTexts()).join('\n---\n'))
+
   // ── Still there after a refresh ────────────────────────────────────────
   await a.page.reload()
   await expect(a.page.getByTestId('repo-facts')).toBeVisible({ timeout: 15_000 })
   await expect(a.page.getByTestId('brief-summary')).not.toContainText('Not generated yet')
+  await expect(a.page.getByTestId('competitor')).toHaveCount(count)
 
   // Clean up the real one.
   await a.page.getByTestId('brief-detail').getByRole('button', { name: 'Delete' }).click()

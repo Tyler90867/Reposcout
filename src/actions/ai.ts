@@ -12,6 +12,9 @@
  *   - The AI has no tools. All it can do is send back text.
  *   - Its answer is cleaned and cut to a maximum length before it is saved,
  *     and the page shows it as plain text.
+ *
+ * Step 3 (src/actions/competitors.ts) also talks to the AI. It uses the two
+ * small helpers in this file: askAi and readJson.
  */
 
 import type { ActionTools } from 'deepspace/worker'
@@ -58,8 +61,59 @@ export function buildUserMessage(brief: Brief): string {
   ].join('\n')
 }
 
-// What the AI integration sends back. We only read the text.
-type AiResponse = { content?: { text?: unknown }[] }
+// What the AI integration sends back: a list of parts. A part is either the
+// answer itself (type "text") or the model's private working-out, which
+// sometimes comes first (type "thinking"). We only read the answer.
+type AiResponse = { content?: { type?: unknown; text?: unknown }[] }
+
+// Room for the working-out plus the answer. We pay for what is used, not
+// for this maximum.
+const MAX_TOKENS = 2000
+
+export type AiReply = { ok: true; text: unknown } | { ok: false; error: string }
+
+/**
+ * Sends one message to the AI and returns the text of its reply.
+ * `system` is the standing instructions. `message` is the data to work on.
+ */
+export async function askAi(tools: ActionTools, system: string, message: string): Promise<AiReply> {
+  const result = await callIntegration<AiResponse>(
+    tools,
+    'anthropic/chat-completion',
+    {
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      system,
+      messages: [{ role: 'user', content: message }],
+    },
+    TIMEOUT_MS,
+  )
+  if (!result.success) {
+    return { ok: false, error: result.error }
+  }
+  const answer = result.data?.content?.find((part) => part.type === 'text')
+  return { ok: true, text: answer?.text }
+}
+
+/**
+ * Finds the JSON object in the AI's reply and turns it into a real object.
+ * Returns null if there is none.
+ */
+export function readJson(text: unknown): Record<string, unknown> | null {
+  if (typeof text !== 'string') return null
+
+  // The AI sometimes puts extra words or ``` marks around its JSON, so we
+  // take everything from the first { to the last }.
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end < start) return null
+
+  try {
+    return JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
 
 export async function writeSummary(tools: ActionTools, brief: Brief): Promise<SummaryResult> {
   // Nothing to read means nothing to summarize. Say so and skip the AI call.
@@ -67,22 +121,12 @@ export async function writeSummary(tools: ActionTools, brief: Brief): Promise<Su
     return { ok: true, summary: NOTHING_TO_READ, audience: NOTHING_TO_READ_AUDIENCE }
   }
 
-  const result = await callIntegration<AiResponse>(
-    tools,
-    'anthropic/chat-completion',
-    {
-      model: MODEL,
-      max_tokens: 600,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserMessage(brief) }],
-    },
-    TIMEOUT_MS,
-  )
-  if (!result.success) {
-    return { ok: false, error: explainAiError(result.error) }
+  const reply = await askAi(tools, SYSTEM_PROMPT, buildUserMessage(brief))
+  if (!reply.ok) {
+    return { ok: false, error: explainAiError(reply.error) }
   }
 
-  const answer = parseAiAnswer(result.data?.content?.[0]?.text)
+  const answer = parseAiAnswer(reply.text)
   if (!answer) {
     return { ok: false, error: 'The AI gave an answer RepoScout could not read. Please try again.' }
   }
@@ -94,23 +138,13 @@ export async function writeSummary(tools: ActionTools, brief: Brief): Promise<Su
  * Returns null if the reply is not that.
  */
 export function parseAiAnswer(text: unknown): { summary: string; audience: string } | null {
-  if (typeof text !== 'string') return null
+  const answer = readJson(text)
+  if (!answer) return null
 
-  // The AI sometimes puts extra words or ``` marks around its JSON, so we
-  // take everything from the first { to the last }.
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end < start) return null
-
-  try {
-    const answer = JSON.parse(text.slice(start, end + 1)) as { summary?: unknown; audience?: unknown }
-    const summary = cleanText(answer.summary, 800).trim()
-    const audience = cleanText(answer.audience, 500).trim()
-    if (!summary || !audience) return null
-    return { summary, audience }
-  } catch {
-    return null
-  }
+  const summary = cleanText(answer.summary, 800).trim()
+  const audience = cleanText(answer.audience, 500).trim()
+  if (!summary || !audience) return null
+  return { summary, audience }
 }
 
 /** Turns a raw integration error into a sentence a user can act on. */

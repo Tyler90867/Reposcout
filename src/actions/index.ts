@@ -15,6 +15,7 @@ import type { Env } from '../../worker'
 import { parseGithubUrl } from '../lib/github-url'
 import type { Brief } from '../schemas/briefs-schema'
 import { writeSummary } from './ai'
+import { findCompetitors } from './competitors'
 import { loadRepo } from './github'
 import { hasReachedLimit, LIMIT_MESSAGE, recordUse } from './usage'
 
@@ -24,10 +25,10 @@ export const actions: Record<string, ActionHandler<Env>> = {
    * saved, so a later failure never throws away what already worked. Running
    * it again picks up where the last run stopped.
    *
-   * Steps so far:
+   * The steps:
    *   1. GitHub: read the repository facts and README
    *   2. AI: write what the product does and who it is for
-   * Still to come: the competitor search.
+   *   3. Search: find competitors on the web, each with a real source link
    */
   generateBrief: async ({ userId, params, tools }) => {
     const briefId = String(params.briefId ?? '')
@@ -46,7 +47,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
     }
 
     // Already finished. There is nothing to do and nothing to pay for.
-    if (brief.status === 'summarized') {
+    if (brief.status === 'done') {
       return { success: true, data: { status: brief.status } }
     }
 
@@ -80,17 +81,25 @@ export const actions: Record<string, ActionHandler<Env>> = {
       return stop('RepoScout could not check your daily limit. Please try again.')
     }
 
-    // Step 2: AI.
-    const written = await writeSummary(tools, brief)
-    if (!written.ok) {
-      return stop(written.error)
+    // Step 2: AI summary. Skipped if an earlier run already did it.
+    if (brief.status === 'repo_loaded') {
+      const written = await writeSummary(tools, brief)
+      if (!written.ok) {
+        return stop(written.error)
+      }
+      const summaryFields = { summary: written.summary, audience: written.audience, status: 'summarized' }
+      await tools.update<Brief>('briefs', briefId, summaryFields)
+      brief = { ...brief, ...summaryFields }
     }
-    await tools.update<Brief>('briefs', briefId, {
-      summary: written.summary,
-      audience: written.audience,
-      status: 'summarized',
-    })
 
-    return { success: true, data: { status: 'summarized' } }
+    // Step 3: competitor search. An empty list is a valid result: it means
+    // the search worked but no competitor could be backed up by a source.
+    const searched = await findCompetitors(tools, brief)
+    if (!searched.ok) {
+      return stop(searched.error)
+    }
+    await tools.update<Brief>('briefs', briefId, { competitors: searched.competitors, status: 'done' })
+
+    return { success: true, data: { status: 'done' } }
   },
 }

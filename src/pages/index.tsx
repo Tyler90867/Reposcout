@@ -44,8 +44,8 @@ export default function Landing() {
           Open your briefs
         </Link>
         <p className="mt-6 max-w-md text-xs text-muted-foreground">
-          Early build: RepoScout reads the repository from GitHub and writes an AI summary.
-          The competitor search is not connected yet.
+          RepoScout reads the repository from GitHub, writes an AI summary, and searches the
+          web for competitors. Every competitor comes with a source link.
         </p>
       </div>
     </>

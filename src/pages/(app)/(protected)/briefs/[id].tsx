@@ -8,6 +8,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutations, useQuery } from 'deepspace'
+import { Competitors } from '@/components/Competitors'
 import { RepoFacts } from '@/components/RepoFacts'
 import { Button, ConfirmModal, useToast } from '@/components/ui'
 import { generateBrief } from '@/lib/generate-brief'
@@ -131,8 +132,8 @@ export default function BriefDetailPage() {
               </p>
             )}
 
-            {/* Shown until every step built so far has finished. */}
-            {brief.data.status !== 'summarized' && (
+            {/* Shown until every step has finished. */}
+            {brief.data.status !== 'done' && (
               <div className="mt-6 flex flex-col gap-3 rounded-lg border border-border bg-secondary p-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted-foreground">
                   {running ? 'Working on it. This can take up to a minute...' : unfinishedText(brief.data)}
@@ -165,25 +166,7 @@ export default function BriefDetailPage() {
             )}
 
             <Section title="Competitors">
-              {brief.data.competitors.length === 0 ? (
-                <NotGenerated />
-              ) : (
-                <ul className="flex flex-col gap-3">
-                  {brief.data.competitors.map((competitor) => (
-                    <li key={competitor.url}>
-                      <a
-                        href={competitor.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-medium text-blue-400 underline-offset-4 hover:underline"
-                      >
-                        {competitor.name}
-                      </a>
-                      <p className="text-muted-foreground">{competitor.description}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <Competitors brief={brief.data} />
             </Section>
           </div>
         )}
@@ -215,7 +198,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /** What to tell the user about a brief that is not finished yet. */
 function unfinishedText(brief: Brief): string {
   if (brief.status === 'draft') return 'The link is saved, but nothing has been loaded for it yet.'
-  return 'The repository is loaded, but the summary is not written yet.'
+  if (brief.status === 'repo_loaded') return 'The repository is loaded, but the summary is not written yet.'
+  return 'The summary is written, but the competitor search has not run yet.'
 }
 
 function NotGenerated() {

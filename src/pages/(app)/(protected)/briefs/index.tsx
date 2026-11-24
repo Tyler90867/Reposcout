@@ -2,7 +2,7 @@
  * The main page: /briefs
  *
  * Top half: a form to paste a GitHub repo link. Saving it also asks the
- * server to read the repository from GitHub and write the AI summary.
+ * server to fill in the brief (GitHub, AI summary, competitor search).
  * Bottom half: the list of briefs this user has saved.
  *
  * This file lives in the (protected) folder, so only signed-in users reach it.
@@ -54,10 +54,10 @@ export default function BriefsPage() {
       const briefId = await createConfirmed(newBrief(parsed.url, parsed.owner, parsed.repo))
       setRepoUrl('')
 
-      // 2. Ask the server to fill it in (GitHub, then the AI summary).
+      // 2. Ask the server to fill it in (GitHub, AI summary, competitor search).
       const result = await generateBrief(briefId)
       if (result.ok) {
-        toast.success('Summary written', `${parsed.owner}/${parsed.repo}`)
+        toast.success('Brief ready', `${parsed.owner}/${parsed.repo}`)
       } else {
         setFormError(`${result.error} The link is still saved below, so you can retry or delete it.`)
       }
@@ -119,8 +119,8 @@ export default function BriefsPage() {
           )}
           <p className="mt-3 text-xs text-muted-foreground">
             {saving
-              ? 'Reading the repository and writing the summary. This can take up to a minute...'
-              : `Right now this reads the repository from GitHub and writes an AI summary. The competitor search is not connected yet. Limit: ${DAILY_LIMIT} briefs per day.`}
+              ? 'Reading the repository, writing the summary, and searching for competitors. This can take up to a minute...'
+              : `RepoScout reads the repository from GitHub, writes an AI summary, and searches the web for competitors. Limit: ${DAILY_LIMIT} briefs per day.`}
           </p>
         </form>
 
@@ -197,7 +197,10 @@ export default function BriefsPage() {
 
 /** The few words shown under each brief in the list. */
 function statusLabel(brief: Brief): string {
-  if (brief.status === 'summarized') return 'Summary written'
+  if (brief.status === 'done') return 'Brief ready'
+  if (brief.status === 'summarized') {
+    return brief.error ? 'Could not find competitors' : 'Summary written, competitors not searched yet'
+  }
   if (brief.status === 'repo_loaded') {
     return brief.error ? 'Could not write the summary' : 'Repository loaded, summary not written yet'
   }
