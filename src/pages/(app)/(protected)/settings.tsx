@@ -1,5 +1,5 @@
 /**
- * Example gated page. Reached at /settings — no auth logic lives here
+ * The signed-in user's account page. Reached at /settings — no auth logic lives here
  * because (protected)/_layout.tsx already wraps the subtree in <AuthGate>.
  */
 
